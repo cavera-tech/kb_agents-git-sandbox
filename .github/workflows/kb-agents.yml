@@ -1,0 +1,59 @@
+name: kb-agents
+run-name: "kb-agents issue ${{ github.event.issue.number }}"
+
+on:
+  issues: { types: [assigned] }
+  issue_comment: { types: [created] }
+
+jobs:
+  architect:
+    if: >-
+      (github.event_name == 'issues' &&
+       github.event.assignee.login == 'cavera-agent02') ||
+      (github.event_name == 'issue_comment' &&
+       contains(github.event.comment.body, '@cavera-agent02') &&
+       github.event.comment.user.login != 'cavera-agent02' &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
+                github.event.comment.author_association))
+    runs-on: [self-hosted, kb-agents]
+    timeout-minutes: 90
+    steps:
+      - run: kb-agent run --profile architect --issue "$ISSUE" ${COMMENT:+--comment "$COMMENT"}
+        env:
+          ISSUE: ${{ github.event.issue.number }}
+          COMMENT: ${{ github.event.comment.id }}
+          GH_TOKEN: ${{ secrets.CAVERA_AGENT02_TOKEN }}
+  business-analyst:
+    if: >-
+      (github.event_name == 'issues' &&
+       github.event.assignee.login == 'cavera-agent01') ||
+      (github.event_name == 'issue_comment' &&
+       contains(github.event.comment.body, '@cavera-agent01') &&
+       github.event.comment.user.login != 'cavera-agent01' &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
+                github.event.comment.author_association))
+    runs-on: [self-hosted, kb-agents]
+    timeout-minutes: 90
+    steps:
+      - run: kb-agent run --profile business-analyst --issue "$ISSUE" ${COMMENT:+--comment "$COMMENT"}
+        env:
+          ISSUE: ${{ github.event.issue.number }}
+          COMMENT: ${{ github.event.comment.id }}
+          GH_TOKEN: ${{ secrets.CAVERA_AGENT01_TOKEN }}
+  developer:
+    if: >-
+      (github.event_name == 'issues' &&
+       github.event.assignee.login == 'cavera-agent03') ||
+      (github.event_name == 'issue_comment' &&
+       contains(github.event.comment.body, '@cavera-agent03') &&
+       github.event.comment.user.login != 'cavera-agent03' &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
+                github.event.comment.author_association))
+    runs-on: [self-hosted, kb-agents]
+    timeout-minutes: 90
+    steps:
+      - run: kb-agent run --profile developer --issue "$ISSUE" ${COMMENT:+--comment "$COMMENT"}
+        env:
+          ISSUE: ${{ github.event.issue.number }}
+          COMMENT: ${{ github.event.comment.id }}
+          GH_TOKEN: ${{ secrets.CAVERA_AGENT03_TOKEN }}

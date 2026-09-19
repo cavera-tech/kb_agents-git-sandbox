@@ -1,0 +1,67 @@
+name: kb-agents-watcher
+on:
+  workflow_run:
+    workflows: [kb-agents]
+    types: [completed]
+
+permissions:
+  issues: write
+
+jobs:
+  watch:
+    if: >-
+      contains(fromJSON('["cancelled","failure","timed_out"]'),
+               github.event.workflow_run.conclusion)
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          set -euo pipefail
+
+          # The issue number is in the run name the kb-agents file
+          # carries (#4): "kb-agents issue N". A run name without a
+          # number has no issue to comment on; stay silent.
+          issue=$(sed -n 's/^kb-agents issue \([0-9][0-9]*\)$/\1/p' <<<"$DISPLAY_TITLE")
+          if [ -z "$issue" ]; then
+            echo "kb-agent: the run name carries no issue number; staying silent"
+            exit 0
+          fi
+
+          # kb-agent run (#3) reports every failure from its tracking
+          # comment on, with a machine-readable marker per run and
+          # attempt. When a comment already carries this run's failed
+          # or done marker, the report exists and the watcher must not
+          # repeat it. A marker still at working means the job died
+          # under the command; no marker at all means the job never
+          # started. Both end here.
+          page=1
+          while :; do
+            comments=$(gh api "repos/$REPO/issues/$issue/comments?per_page=100&page=$page")
+            if printf '%s' "$comments" | jq -e --arg m "kb-agents run:$RUN_ID/$RUN_ATTEMPT status:" '
+              [.[] | (.body // "")
+               | select(contains("<!-- " + $m + "failed -->")
+                      or contains("<!-- " + $m + "done -->"))]
+              | length > 0' >/dev/null; then
+              echo "kb-agent: the run already reported itself; staying silent"
+              exit 0
+            fi
+            count=$(printf '%s' "$comments" | jq 'length')
+            if [ "$count" -lt 100 ]; then
+              break
+            fi
+            page=$((page + 1))
+          done
+
+          # The conclusion, the run link, and how to call again. Made
+          # with GITHUB_TOKEN, which does not trigger workflows, so the
+          # comment cannot wake an agent.
+          body=$(printf 'The run ended with the conclusion `%s`.\n\n[Run](%s)\n\nTo call again: re-run the job from the Actions tab, or mention the agent in a comment on this issue.\n' "$CONCLUSION" "$RUN_URL")
+          gh api "repos/$REPO/issues/$issue/comments" -X POST -f body="$body"
+          echo "kb-agent: commented on issue $issue (run $RUN_ID, attempt $RUN_ATTEMPT, $CONCLUSION)"
+        env:
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          DISPLAY_TITLE: ${{ github.event.workflow_run.display_title }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
